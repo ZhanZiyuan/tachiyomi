@@ -1,11 +1,14 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
+import android.graphics.Point
 import android.graphics.PointF
+import android.graphics.Rect
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewTreeObserver
 import androidx.core.app.ActivityCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -72,6 +75,13 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
      */
     private var currentPage: Any? = null
 
+    private var narrationDestroyed = false
+    private val narrationPreDrawListener = ViewTreeObserver.OnPreDrawListener {
+        // The recycler itself scales and translates during webtoon zoom gestures.
+        updateNarrationViewport()
+        true
+    }
+
     private val threshold: Int =
         Injekt.get<ReaderPreferences>()
             .readerHideThreshold()
@@ -85,6 +95,7 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
         recycler.itemAnimator = null
         recycler.layoutManager = layoutManager
         recycler.adapter = adapter
+        recycler.viewTreeObserver.addOnPreDrawListener(narrationPreDrawListener)
         recycler.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -161,6 +172,55 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
         frame.addView(recycler)
     }
 
+    /** Reports the page and image band in the reader's central reading zone. */
+    fun updateNarrationViewport() {
+        if (narrationDestroyed) return
+        if (!recycler.isVisible || recycler.height <= 0) {
+            activity.onNarrationViewportUnavailable()
+            return
+        }
+        val visible = Rect()
+        if (!recycler.getGlobalVisibleRect(visible) || visible.isEmpty) {
+            activity.onNarrationViewportUnavailable()
+            return
+        }
+        val middle = visible.exactCenterY()
+        val zoneTop = visible.top + visible.height() * 0.35f
+        val zoneBottom = visible.top + visible.height() * 0.65f
+        val childBounds = Rect()
+        val childOffset = Point()
+        for (index in 0 until recycler.childCount) {
+            val child = recycler.getChildAt(index)
+            if (!child.getGlobalVisibleRect(childBounds, childOffset) ||
+                middle < childBounds.top || middle >= childBounds.bottom
+            ) {
+                continue
+            }
+            val holder = recycler.getChildViewHolder(child) as? WebtoonPageHolder
+            if (holder == null) {
+                activity.onNarrationViewportUnavailable()
+                return
+            }
+            var scaleY = child.scaleY
+            var ancestor = child.parent as? View
+            while (ancestor != null) {
+                scaleY *= ancestor.scaleY
+                ancestor = ancestor.parent as? View
+            }
+            if (!scaleY.isFinite() || scaleY <= 0f) {
+                activity.onNarrationViewportUnavailable()
+                return
+            }
+            val localTop = ((zoneTop - childOffset.y) / scaleY).coerceIn(0f, child.height.toFloat())
+            val localBottom = ((zoneBottom - childOffset.y) / scaleY).coerceIn(0f, child.height.toFloat())
+            if (localBottom <= localTop || !holder.reportNarrationViewport(localTop, localBottom)) {
+                activity.onNarrationViewportUnavailable()
+            }
+            return
+        }
+        activity.onNarrationViewportUnavailable()
+    }
+
     private fun checkAllowPreload(page: ReaderPage?): Boolean {
         // Page is transition page - preload allowed
         page ?: return true
@@ -192,6 +252,10 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
      * Destroys this viewer. Called when leaving the reader or swapping viewers.
      */
     override fun destroy() {
+        narrationDestroyed = true
+        if (recycler.viewTreeObserver.isAlive) {
+            recycler.viewTreeObserver.removeOnPreDrawListener(narrationPreDrawListener)
+        }
         super.destroy()
         scope.cancel()
     }
@@ -272,6 +336,7 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
                 is ChapterTransition -> onTransitionSelected(item)
             }
         }
+        updateNarrationViewport()
     }
 
     /**

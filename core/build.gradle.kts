@@ -6,10 +6,12 @@ plugins {
 
 android {
     namespace = "eu.kanade.tachiyomi.core"
+}
 
-    kotlinOptions {
-        freeCompilerArgs += listOf(
-            "-Xcontext-receivers",
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-Xcontext-parameters",
             "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
             "-opt-in=kotlinx.serialization.ExperimentalSerializationApi",
         )
@@ -26,6 +28,7 @@ dependencies {
     api(libs.okhttp.core)
     api(libs.okhttp.logging)
     api(libs.okhttp.brotli)
+    api(libs.okhttp.zstd)
     api(libs.okhttp.dnsoverhttps)
     api(libs.okio)
 

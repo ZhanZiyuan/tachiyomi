@@ -5,6 +5,7 @@ import logcat.LogPriority
 import tachiyomi.core.util.lang.toLong
 import tachiyomi.core.util.system.logcat
 import tachiyomi.data.DatabaseHandler
+import tachiyomi.data.SourceMemoAdapter
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.repository.ChapterRepository
@@ -29,6 +30,7 @@ class ChapterRepositoryImpl(
                         chapter.sourceOrder,
                         chapter.dateFetch,
                         chapter.dateUpload,
+                        SourceMemoAdapter.encode(chapter.memo),
                     )
                     val lastInsertId = chaptersQueries.selectLastInsertedRowId().executeAsOne()
                     chapter.copy(id = lastInsertId)
@@ -64,6 +66,7 @@ class ChapterRepositoryImpl(
                     dateFetch = chapterUpdate.dateFetch,
                     dateUpload = chapterUpdate.dateUpload,
                     chapterId = chapterUpdate.id,
+                    memo = chapterUpdate.memo?.let(SourceMemoAdapter::encode),
                 )
             }
         }
@@ -138,6 +141,7 @@ class ChapterRepositoryImpl(
         dateFetch: Long,
         dateUpload: Long,
         lastModifiedAt: Long,
+        memo: String,
     ): Chapter = Chapter(
         id = id,
         mangaId = mangaId,
@@ -152,5 +156,6 @@ class ChapterRepositoryImpl(
         chapterNumber = chapterNumber,
         scanlator = scanlator,
         lastModifiedAt = lastModifiedAt,
+        memo = SourceMemoAdapter.decode(memo),
     )
 }

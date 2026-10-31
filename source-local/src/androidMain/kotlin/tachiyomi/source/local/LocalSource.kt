@@ -298,7 +298,8 @@ actual class LocalSource(
     override fun getFilterList() = FilterList(OrderBy.Popular(context))
 
     // Unused stuff
-    override suspend fun getPageList(chapter: SChapter) = throw UnsupportedOperationException("Unused")
+    override suspend fun getPageList(chapter: SChapter): List<eu.kanade.tachiyomi.source.model.Page> =
+        throw UnsupportedOperationException("Unused")
 
     fun getFormat(chapter: SChapter): Format {
         try {

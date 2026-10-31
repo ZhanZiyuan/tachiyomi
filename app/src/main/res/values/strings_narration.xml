@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="narration_settings_title">AI narration</string>
+    <string name="narration_settings_summary">Character voices, emotional dialogue, and playback settings</string>
+    <string name="narration_settings_explanation">When enabled, each manga page is sent directly to Gemini, then its dialogue is sent to ElevenLabs for speech. The visible page is handled first and the rest continues in the background, so you can read while it prepares. A failed page is skipped and can be retried from the reader. Generation uses your API quota. Audio is saved on this device for replay.</string>
+    <string name="narration_enable">Enable AI narration</string>
+    <string name="narration_auto_play">Play automatically while reading</string>
+    <string name="narration_playback_speed">Playback speed</string>
+    <string name="narration_pause_between_lines">Pause between dialogue</string>
+    <string name="narration_control_value">%1$s: %2$s</string>
+    <string name="narration_speed_value">%1$.2fx</string>
+    <string name="narration_pause_value">%1$d ms</string>
+    <string name="narration_gemini_key">Gemini API key</string>
+    <string name="narration_elevenlabs_key">ElevenLabs API key</string>
+    <string name="narration_gemini_model">Gemini model</string>
+    <string name="narration_speech_model">ElevenLabs speech model</string>
+    <string name="narration_default_voice">Default narrator voice ID</string>
+    <string name="narration_page_queue">Pages are analyzed one at a time. This keeps failures isolated and lets narration begin on the current page sooner.</string>
+    <string name="narration_required">Required when narration is enabled.</string>
+    <string name="narration_save">Save settings</string>
+    <string name="narration_saved">Narration settings saved</string>
+    <string name="narration_back">Back</string>
+    <string name="narration_credentials_save_error">Could not securely save the API keys. Please try again.</string>
+    <string name="narration_load_voices">Load available voices</string>
+    <string name="narration_loading_voices">Checking ElevenLabs and loading voices…</string>
+    <string name="narration_no_voices">No available voices were returned. You can enter a voice ID above.</string>
+    <string name="narration_voices_loaded">ElevenLabs connected. Choose a narrator voice.</string>
+    <string name="narration_choose_voice">Narrator voice</string>
+    <string name="narration_voice_load_error">Could not load voices. Check the key, its voice-read permission, and your internet connection.</string>
+</resources>

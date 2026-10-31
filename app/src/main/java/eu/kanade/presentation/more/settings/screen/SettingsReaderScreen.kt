@@ -5,8 +5,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.ui.reader.narration.NarrationSettingsActivity
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
@@ -29,7 +32,13 @@ object SettingsReaderScreen : SearchableSettings {
     @Composable
     override fun getPreferences(): List<Preference> {
         val readerPref = remember { Injekt.get<ReaderPreferences>() }
+        val context = LocalContext.current
         return listOf(
+            Preference.PreferenceItem.TextPreference(
+                title = context.getString(R.string.narration_settings_title),
+                subtitle = context.getString(R.string.narration_settings_summary),
+                onClick = { context.startActivity(NarrationSettingsActivity.newIntent(context)) },
+            ),
             Preference.PreferenceItem.ListPreference(
                 pref = readerPref.defaultReadingMode(),
                 title = stringResource(MR.strings.pref_viewer_type),

@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Environment
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.net.toUri
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.extension.ExtensionManager
@@ -17,21 +18,34 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
+import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.launch
 import logcat.LogPriority
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import tachiyomi.core.util.lang.withIOContext
 import tachiyomi.core.util.lang.withUIContext
 import tachiyomi.core.util.system.logcat
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -55,9 +69,14 @@ internal class ExtensionInstaller(private val context: Context) {
      * The currently requested downloads, with the package name (unique id) as key, and the id
      * returned by the download manager.
      */
-    private val activeDownloads = hashMapOf<String, Long>()
+    private val activeDownloads = ConcurrentHashMap<String, Long>()
 
-    private val downloadsStateFlows = hashMapOf<Long, MutableStateFlow<InstallStep>>()
+    private val downloadsStateFlows = ConcurrentHashMap<Long, MutableStateFlow<InstallStep>>()
+
+    private val expectedDownloads = ConcurrentHashMap<Long, Extension.Available>()
+    private val verificationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val verificationJobs = ConcurrentHashMap<Long, Job>()
+    private val verifiedFiles = ConcurrentHashMap<Long, File>()
 
     private val extensionInstaller = Injekt.get<BasePreferences>().extensionInstaller()
 
@@ -68,7 +87,11 @@ internal class ExtensionInstaller(private val context: Context) {
      * @param url The url of the apk.
      * @param extension The extension to install.
      */
-    fun downloadAndInstall(url: String, extension: Extension): Flow<InstallStep> {
+    fun downloadAndInstall(url: String, extension: Extension.Available): Flow<InstallStep> {
+        val apkUrl = url.toHttpUrlOrNull()
+        if (apkUrl == null || !apkUrl.isHttps || apkUrl.username.isNotEmpty() || apkUrl.password.isNotEmpty()) {
+            return flowOf(InstallStep.Error)
+        }
         val pkgName = extension.pkgName
 
         val oldDownload = activeDownloads[pkgName]
@@ -88,6 +111,7 @@ internal class ExtensionInstaller(private val context: Context) {
 
         val id = downloadManager.enqueue(request)
         activeDownloads[pkgName] = id
+        expectedDownloads[id] = extension
 
         val downloadStateFlow = MutableStateFlow(InstallStep.Pending)
         downloadsStateFlows[id] = downloadStateFlow
@@ -98,6 +122,7 @@ internal class ExtensionInstaller(private val context: Context) {
             when (downloadStatus) {
                 DownloadManager.STATUS_PENDING -> InstallStep.Pending
                 DownloadManager.STATUS_RUNNING -> InstallStep.Downloading
+                DownloadManager.STATUS_FAILED -> InstallStep.Error
                 else -> null
             }
         }
@@ -110,7 +135,7 @@ internal class ExtensionInstaller(private val context: Context) {
             // Always notify on main thread
             withUIContext {
                 // Always remove the download when unsubscribed
-                deleteDownload(pkgName)
+                if (activeDownloads[pkgName] == id) deleteDownload(pkgName)
             }
         }
     }
@@ -149,9 +174,10 @@ internal class ExtensionInstaller(private val context: Context) {
     /**
      * Starts an intent to install the extension at the given uri.
      *
-     * @param uri The uri of the extension to install.
+     * @param apkFile The private, verified copy of the extension to install.
      */
-    fun installApk(downloadId: Long, uri: Uri) {
+    private fun installApk(downloadId: Long, apkFile: File) {
+        val uri = apkFile.getUriCompat(context)
         when (val installer = extensionInstaller.get()) {
             BasePreferences.ExtensionInstaller.LEGACY -> {
                 val intent = Intent(context, ExtensionInstallActivity::class.java)
@@ -163,22 +189,8 @@ internal class ExtensionInstaller(private val context: Context) {
             }
             BasePreferences.ExtensionInstaller.PRIVATE -> {
                 val extensionManager = Injekt.get<ExtensionManager>()
-                val tempFile = File(context.cacheDir, "temp_$downloadId")
-
-                if (tempFile.exists() && !tempFile.delete()) {
-                    // Unlikely but just in case
-                    extensionManager.updateInstallStep(downloadId, InstallStep.Error)
-                    return
-                }
-
                 try {
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        tempFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-
-                    if (ExtensionLoader.installPrivateExtensionFile(context, tempFile)) {
+                    if (ExtensionLoader.installPrivateExtensionFile(context, apkFile)) {
                         extensionManager.updateInstallStep(downloadId, InstallStep.Installed)
                     } else {
                         extensionManager.updateInstallStep(downloadId, InstallStep.Error)
@@ -187,8 +199,6 @@ internal class ExtensionInstaller(private val context: Context) {
                     logcat(LogPriority.ERROR, e) { "Failed to read downloaded extension file." }
                     extensionManager.updateInstallStep(downloadId, InstallStep.Error)
                 }
-
-                tempFile.delete()
             }
             else -> {
                 val intent = ExtensionInstallService.getIntent(context, downloadId, uri, installer)
@@ -201,9 +211,10 @@ internal class ExtensionInstaller(private val context: Context) {
      * Cancels extension install and remove from download manager and installer.
      */
     fun cancelInstall(pkgName: String) {
-        val downloadId = activeDownloads.remove(pkgName) ?: return
-        downloadManager.remove(downloadId)
+        val downloadId = activeDownloads[pkgName] ?: return
+        updateInstallStep(downloadId, InstallStep.Idle)
         Installer.cancelInstallQueue(context, downloadId)
+        deleteDownload(pkgName)
     }
 
     /**
@@ -243,9 +254,50 @@ internal class ExtensionInstaller(private val context: Context) {
         if (downloadId != null) {
             downloadManager.remove(downloadId)
             downloadsStateFlows.remove(downloadId)
+            expectedDownloads.remove(downloadId)
+            verificationJobs.remove(downloadId)?.cancel()
+            verifiedFiles.remove(downloadId)?.delete()
         }
         if (activeDownloads.isEmpty()) {
             downloadReceiver.unregister()
+        }
+    }
+
+    /** Verify a private copy, so the installed bytes are the bytes we inspected. */
+    private fun verifyDownloadedApk(id: Long, uri: Uri, expected: Extension.Available): File {
+        val apkFile = File(context.cacheDir, "extension_verified_$id.apk")
+        try {
+            if (apkFile.exists() && !apkFile.delete()) throw IOException("Cannot replace temporary extension")
+            val input = context.contentResolver.openInputStream(uri)
+                ?: throw IOException("Cannot read downloaded extension")
+            input.use {
+                apkFile.outputStream().use { output ->
+                    check(apkFile.setReadOnly()) { "Cannot protect temporary extension" }
+                    it.copyTo(output)
+                }
+            }
+            val packageInfo = ExtensionLoader.getArchivePackageInfo(context, apkFile)
+                ?: throw IOException("Downloaded file is not an extension APK")
+            val signatures = ExtensionLoader.getSignatures(packageInfo).orEmpty()
+            check(
+                matchesExtensionListing(
+                    expectedPackage = expected.pkgName,
+                    expectedVersion = expected.versionCode,
+                    expectedSigningKey = expected.signingKey,
+                    actualPackage = packageInfo.packageName,
+                    actualVersion = PackageInfoCompat.getLongVersionCode(packageInfo),
+                    actualSigningKeys = signatures,
+                ),
+            ) {
+                "Downloaded extension does not match its catalog: " +
+                    "package=${packageInfo.packageName} (expected ${expected.pkgName}), " +
+                    "version=${PackageInfoCompat.getLongVersionCode(packageInfo)} (expected ${expected.versionCode}), " +
+                    "signers=$signatures (expected ${expected.signingKey})"
+            }
+            return apkFile
+        } catch (e: Exception) {
+            apkFile.delete()
+            throw e
         }
     }
 
@@ -290,23 +342,46 @@ internal class ExtensionInstaller(private val context: Context) {
             // Avoid events for downloads we didn't request
             if (id !in activeDownloads.values) return
 
+            val expected = expectedDownloads[id] ?: return
+            if (verificationJobs[id]?.isActive == true || verifiedFiles.containsKey(id)) return
+            val query = DownloadManager.Query().setFilterById(id)
+            val status = downloadManager.query(query).use { cursor ->
+                if (!cursor.moveToFirst()) return
+                cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            }
+            if (status != DownloadManager.STATUS_SUCCESSFUL) {
+                if (status == DownloadManager.STATUS_FAILED) updateInstallStep(id, InstallStep.Error)
+                return
+            }
             val uri = downloadManager.getUriForDownloadedFile(id)
-
-            // Set next installation step
             if (uri == null) {
-                logcat(LogPriority.ERROR) { "Couldn't locate downloaded APK" }
                 updateInstallStep(id, InstallStep.Error)
                 return
             }
 
-            val query = DownloadManager.Query().setFilterById(id)
-            downloadManager.query(query).use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val localUri = cursor.getString(
-                        cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI),
-                    ).removePrefix(FILE_SCHEME)
-
-                    installApk(id, File(localUri).getUriCompat(context))
+            val pendingResult = goAsync()
+            verificationJobs[id] = verificationScope.launch {
+                var apkFile: File? = null
+                try {
+                    val verified = withIOContext { verifyDownloadedApk(id, uri, expected) }
+                    apkFile = verified
+                    if (activeDownloads[expected.pkgName] != id) return@launch
+                    verifiedFiles[id] = verified
+                    installApk(id, verified)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to verify downloaded extension" }
+                    context.toast(MR.strings.ext_verification_error)
+                    updateInstallStep(id, InstallStep.Error)
+                } finally {
+                    if (!verifiedFiles.containsKey(id)) {
+                        apkFile?.delete()
+                        // withIOContext can be cancelled after the copy completes but before returning it.
+                        File(context.cacheDir, "extension_verified_$id.apk").delete()
+                    }
+                    verificationJobs.remove(id)
+                    pendingResult.finish()
                 }
             }
         }
@@ -315,6 +390,5 @@ internal class ExtensionInstaller(private val context: Context) {
     companion object {
         const val APK_MIME = "application/vnd.android.package-archive"
         const val EXTRA_DOWNLOAD_ID = "ExtensionInstaller.extra.DOWNLOAD_ID"
-        const val FILE_SCHEME = "file://"
     }
 }

@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.data.database.models
 
 class ChapterImpl : Chapter {
 
+    override var memo = kotlinx.serialization.json.JsonObject(emptyMap())
+
     override var id: Long? = null
 
     override var manga_id: Long? = null

@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
 import android.content.Context
+import android.graphics.Matrix
 import android.graphics.PointF
 import android.graphics.RectF
 import android.graphics.drawable.Animatable
@@ -59,6 +60,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     var onImageLoadError: (() -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
+    var onViewportChanged: (() -> Unit)? = null
 
     /**
      * For automatic background. Will be set as background color when [onImageLoaded] is called.
@@ -69,6 +71,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     open fun onImageLoaded() {
         onImageLoaded?.invoke()
         background = pageBackground
+        post { onViewportChanged?.invoke() }
     }
 
     @CallSuper
@@ -79,6 +82,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     @CallSuper
     open fun onScaleChanged(newScale: Float) {
         onScaleChanged?.invoke(newScale)
+        onViewportChanged?.invoke()
     }
 
     @CallSuper
@@ -164,6 +168,38 @@ open class ReaderPageImageView @JvmOverloads constructor(
         it.isVisible = false
     }
 
+    /** Maps a band in this view to normalized source-image Y coordinates. */
+    fun narrationVisibleRange(localTop: Float, localBottom: Float): Pair<Float, Float>? {
+        val imageView = pageView?.takeIf { it.isVisible } ?: return null
+        if (localTop >= localBottom || !localTop.isFinite() || !localBottom.isFinite()) return null
+        // Border cropping changes the decoded origin; use page-level narration for that mode.
+        if (config?.cropBorders == true) return 0f to 1f
+        return when (imageView) {
+            is SubsamplingScaleImageView -> {
+                if (!imageView.isReady || imageView.sHeight <= 0) return null
+                val x = imageView.width / 2f
+                val top = imageView.viewToSourceCoord(x, localTop - imageView.top)?.y ?: return null
+                val bottom = imageView.viewToSourceCoord(x, localBottom - imageView.top)?.y ?: return null
+                narrationSourceRange(top, bottom, imageView.sHeight)
+            }
+            is AppCompatImageView -> {
+                val drawable = imageView.drawable ?: return null
+                val inverse = Matrix()
+                if (!imageView.imageMatrix.invert(inverse)) return null
+                val x = (imageView.width - imageView.paddingLeft - imageView.paddingRight) / 2f
+                val points = floatArrayOf(
+                    x,
+                    localTop - imageView.top - imageView.paddingTop,
+                    x,
+                    localBottom - imageView.top - imageView.paddingTop,
+                )
+                inverse.mapPoints(points)
+                narrationSourceRange(points[1], points[3], drawable.intrinsicHeight)
+            }
+            else -> null
+        }
+    }
+
     /**
      * Check if the image can be panned to the left
      */
@@ -238,7 +274,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     }
 
                     override fun onCenterChanged(newCenter: PointF?, origin: Int) {
-                        // Not used
+                        this@ReaderPageImageView.onViewportChanged?.invoke()
                     }
                 },
             )
@@ -383,3 +419,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
 }
 
 private const val MAX_ZOOM_SCALE = 5F
+
+/** Clips source coordinates before converting them to the normalized analysis coordinate space. */
+internal fun narrationSourceRange(top: Float, bottom: Float, sourceHeight: Int): Pair<Float, Float>? {
+    if (sourceHeight <= 0 || !top.isFinite() || !bottom.isFinite() || bottom <= top) return null
+    val clippedTop = top.coerceIn(0f, sourceHeight.toFloat())
+    val clippedBottom = bottom.coerceIn(0f, sourceHeight.toFloat())
+    if (clippedBottom <= clippedTop) return null
+    return clippedTop / sourceHeight to clippedBottom / sourceHeight
+}

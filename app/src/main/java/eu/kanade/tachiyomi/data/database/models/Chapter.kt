@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.data.database.models
 
 import eu.kanade.tachiyomi.source.model.SChapter
-import java.io.Serializable
 import tachiyomi.domain.chapter.model.Chapter as DomainChapter
+import java.io.Serializable
 
 interface Chapter : SChapter, Serializable {
 
@@ -39,5 +39,6 @@ fun Chapter.toDomainChapter(): DomainChapter? {
         chapterNumber = chapter_number.toDouble(),
         scanlator = scanlator,
         lastModifiedAt = last_modified,
+        memo = memo,
     )
 }

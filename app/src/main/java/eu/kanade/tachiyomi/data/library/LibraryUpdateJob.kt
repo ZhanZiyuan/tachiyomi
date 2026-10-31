@@ -17,11 +17,13 @@ import androidx.work.WorkQuery
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import eu.kanade.domain.chapter.interactor.SyncChaptersWithSource
+import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.domain.manga.interactor.UpdateManga
 import eu.kanade.domain.manga.model.toSManga
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.source.getMangaUpdateCompat
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.util.shouldDownloadNewChapters
@@ -77,6 +79,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class LibraryUpdateJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
 
+    private val getChaptersByMangaId: tachiyomi.domain.chapter.interactor.GetChaptersByMangaId = Injekt.get()
     private val sourceManager: SourceManager = Injekt.get()
     private val downloadPreferences: DownloadPreferences = Injekt.get()
     private val libraryPreferences: LibraryPreferences = Injekt.get()
@@ -335,13 +338,14 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     private suspend fun updateManga(manga: Manga, fetchWindow: Pair<Long, Long>): List<Chapter> {
         val source = sourceManager.getOrStub(manga.source)
 
-        // Update manga metadata if needed
-        if (libraryPreferences.autoUpdateMetadata().get()) {
-            val networkManga = source.getMangaDetails(manga.toSManga())
-            updateManga.awaitUpdateFromSource(manga, networkManga, manualFetch = false, coverCache)
-        }
-
-        val chapters = source.getChapterList(manga.toSManga())
+        val update = source.getMangaUpdateCompat(
+            manga.toSManga(),
+            getChaptersByMangaId.await(manga.id, applyScanlatorFilter = false).map { it.toSChapter() },
+            fetchDetails = libraryPreferences.autoUpdateMetadata().get(),
+            fetchChapters = true,
+        )
+        updateManga.awaitUpdateFromSource(manga, update.manga, manualFetch = false, coverCache)
+        val chapters = update.chapters
 
         // Get manga from database to account for if it was removed during the update and
         // to get latest data so it doesn't get overwritten later on

@@ -1,5 +1,8 @@
+@file:Suppress("PropertyName")
+
 package eu.kanade.tachiyomi.source.model
 
+import kotlinx.serialization.json.JsonObject
 import java.io.Serializable
 
 interface SManga : Serializable {
@@ -8,21 +11,36 @@ interface SManga : Serializable {
 
     var title: String
 
+    var thumbnail_url: String?
+
     var artist: String?
 
     var author: String?
+
+    var status: Int
 
     var description: String?
 
     var genre: String?
 
-    var status: Int
-
-    var thumbnail_url: String?
-
     var update_strategy: UpdateStrategy
 
     var initialized: Boolean
+
+    /**
+     * Extra metadata associated with the manga.
+     *
+     * The JSON object is not visible to users and intended for internal or source-specific
+     * purposes. Apps may define their own namespaced keys (e.g., `"mihon.*"`) for sources to populate.
+     *
+     * This allows apps to attach and ask for custom information without affecting the visible
+     * manga data.
+     *
+     * @since tachiyomix 1.6
+     */
+    var memo: JsonObject
+        get() = JsonObject(emptyMap())
+        set(@Suppress("UNUSED_PARAMETER") value) {}
 
     fun getGenres(): List<String>? {
         if (genre.isNullOrBlank()) return null
@@ -40,6 +58,7 @@ interface SManga : Serializable {
         it.thumbnail_url = thumbnail_url
         it.update_strategy = update_strategy
         it.initialized = initialized
+        it.memo = memo
     }
 
     companion object {

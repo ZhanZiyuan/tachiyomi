@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +42,7 @@ class ExtensionsScreenModel(
 ) : StateScreenModel<ExtensionsScreenModel.State>(State()) {
 
     private var _currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
+    private var refreshJob: Job? = null
 
     init {
         val context = Injekt.get<Application>()
@@ -121,7 +123,9 @@ class ExtensionsScreenModel(
                 }
         }
 
-        screenModelScope.launchIO { findAvailableExtensions() }
+        preferences.extensionRepos().changes()
+            .onEach { findAvailableExtensions() }
+            .launchIn(screenModelScope)
 
         preferences.extensionUpdatesCount().changes()
             .onEach { mutableState.update { state -> state.copy(updates = it) } }
@@ -183,15 +187,14 @@ class ExtensionsScreenModel(
     }
 
     fun findAvailableExtensions() {
-        screenModelScope.launchIO {
+        refreshJob?.cancel()
+        refreshJob = screenModelScope.launchIO {
             mutableState.update { it.copy(isRefreshing = true) }
-
-            extensionManager.findAvailableExtensions()
-
-            // Fake slower refresh so it doesn't seem like it's not doing anything
-            delay(1.seconds)
-
-            mutableState.update { it.copy(isRefreshing = false) }
+            try {
+                extensionManager.findAvailableExtensions()
+            } finally {
+                mutableState.update { it.copy(isRefreshing = false) }
+            }
         }
     }
 
@@ -223,5 +226,11 @@ object ExtensionUiModel {
     data class Item(
         val extension: Extension,
         val installStep: InstallStep,
-    )
+    ) {
+        val key: String
+            get() = when (val ext = extension) {
+                is Extension.Available -> "extension-${ext.pkgName}-${ext.sources.joinToString(",") { it.id.toString() }}"
+                else -> "extension-${ext.pkgName}"
+            }
+    }
 }

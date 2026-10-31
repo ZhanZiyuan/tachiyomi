@@ -110,6 +110,11 @@
             android:process=":error_handler" />
 
         <activity
+            android:name=".ui.reader.narration.NarrationSettingsActivity"
+            android:exported="false"
+            android:label="@string/narration_settings_title" />
+
+        <activity
             android:name=".ui.deeplink.DeepLinkActivity"
             android:exported="true"
             android:label="@string/action_search"

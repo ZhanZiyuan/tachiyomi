@@ -1,4 +1,14 @@
 pluginManagement {
+    // Kotlin 2.4 requires D8/R8 9.1.29 or newer; use a published 9.1 patch release.
+    buildscript {
+        repositories {
+            google()
+            mavenCentral()
+        }
+        dependencies {
+            classpath("com.android.tools:r8:9.1.57")
+        }
+    }
     resolutionStrategy {
         eachPlugin {
             val regex = "com.android.(library|application)".toRegex()
@@ -8,9 +18,9 @@ pluginManagement {
         }
     }
     repositories {
-        gradlePluginPortal()
-        google()
         mavenCentral()
+        google()
+        gradlePluginPortal()
         maven(url = "https://www.jitpack.io")
     }
 }

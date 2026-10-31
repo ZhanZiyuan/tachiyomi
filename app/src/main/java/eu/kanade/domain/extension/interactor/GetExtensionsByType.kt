@@ -43,14 +43,7 @@ class GetExtensionsByType(
                         return@flatMap if (ext.lang in _activeLanguages) listOf(ext) else emptyList()
                     }
                     ext.sources.filter { it.lang in _activeLanguages }
-                        .map {
-                            ext.copy(
-                                name = it.name,
-                                lang = it.lang,
-                                pkgName = "${ext.pkgName}-${it.id}",
-                                sources = listOf(it),
-                            )
-                        }
+                        .map { ext.forSource(it) }
                 }
                 .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 
@@ -58,3 +51,11 @@ class GetExtensionsByType(
         }
     }
 }
+
+// Language-specific rows share the APK identity, download progress, and cancel action.
+// Row identity belongs in the list key, never in the Android package name.
+internal fun Extension.Available.forSource(source: Extension.Available.Source): Extension.Available = copy(
+    name = source.name,
+    lang = source.lang,
+    sources = listOf(source),
+)
