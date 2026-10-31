@@ -70,6 +70,7 @@ class WebtoonPageHolder(
      * Page of a chapter.
      */
     private var page: ReaderPage? = null
+    private var imageDecoded = false
 
     private val scope = MainScope()
 
@@ -84,6 +85,7 @@ class WebtoonPageHolder(
         frame.onImageLoaded = { onImageDecoded() }
         frame.onImageLoadError = { setError() }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
+        frame.onViewportChanged = { viewer.updateNarrationViewport() }
     }
 
     /**
@@ -91,9 +93,24 @@ class WebtoonPageHolder(
      */
     fun bind(page: ReaderPage) {
         this.page = page
+        imageDecoded = false
         loadJob?.cancel()
         loadJob = scope.launch { loadPageAndProcessStatus() }
         refreshLayoutParams()
+    }
+
+    /** [localTop] and [localBottom] are measured in this holder's unscaled frame. */
+    fun reportNarrationViewport(localTop: Float, localBottom: Float): Boolean {
+        val page = page ?: return false
+        if (!imageDecoded || page.status != Page.State.READY || errorLayout != null) return false
+        val range = if (viewer.config.dualPageRotateToFit || viewer.config.dualPageSplit) {
+            // The displayed pixels have been rearranged; page-level playback is the safe fallback.
+            0f to 1f
+        } else {
+            frame.narrationVisibleRange(localTop, localBottom) ?: return false
+        }
+        viewer.activity.onNarrationViewport(page, range.first, range.second)
+        return true
     }
 
     private fun refreshLayoutParams() {
@@ -112,6 +129,7 @@ class WebtoonPageHolder(
      * Called when the view is recycled and added to the view pool.
      */
     override fun recycle() {
+        imageDecoded = false
         loadJob?.cancel()
         loadJob = null
 
@@ -155,6 +173,7 @@ class WebtoonPageHolder(
      * Called when the page is queued.
      */
     private fun setQueued() {
+        imageDecoded = false
         progressContainer.isVisible = true
         progressIndicator.show()
         removeErrorLayout()
@@ -164,6 +183,7 @@ class WebtoonPageHolder(
      * Called when the page is loading.
      */
     private fun setLoading() {
+        imageDecoded = false
         progressContainer.isVisible = true
         progressIndicator.show()
         removeErrorLayout()
@@ -173,6 +193,7 @@ class WebtoonPageHolder(
      * Called when the page is downloading
      */
     private fun setDownloading() {
+        imageDecoded = false
         progressContainer.isVisible = true
         progressIndicator.show()
         removeErrorLayout()
@@ -248,6 +269,7 @@ class WebtoonPageHolder(
      * Called when the page has an error.
      */
     private fun setError() {
+        imageDecoded = false
         progressContainer.isVisible = false
         initErrorLayout()
     }
@@ -256,8 +278,10 @@ class WebtoonPageHolder(
      * Called when the image is decoded and going to be displayed.
      */
     private fun onImageDecoded() {
+        imageDecoded = true
         progressContainer.isVisible = false
         removeErrorLayout()
+        frame.post { viewer.updateNarrationViewport() }
     }
 
     /**

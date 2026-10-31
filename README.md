@@ -16,6 +16,36 @@ Features include:
 * Light and dark themes
 * Schedule updating your library for new chapters
 * Create backups locally to read offline or to your desired cloud service
+* Optional AI narration using Gemini page analysis and ElevenLabs text-to-speech
+
+## Optional AI narration
+
+This fork adds an optional narration feature. Gemini reads the visible manga page, identifies dialogue, panel order, speakers, emotions, and inner thoughts. ElevenLabs then generates the character voices. The app contacts those providers directly from your phone; there is no narration backend operated by this project.
+
+### What you need
+
+1. A Gemini API key with access to the selected model and enough quota or billing credit for image analysis.
+2. An ElevenLabs API key with text-to-speech access and available credits.
+3. An internet connection while a page is being analyzed or a new voice clip is generated.
+
+Both providers can charge for usage. Gemini receives the page images and context needed to determine the reading order and speakers. ElevenLabs receives the dialogue text to synthesize it. Review each provider's pricing, terms, and privacy information before enabling narration.
+
+### Set it up in the app
+
+1. Open a chapter, tap the narration/voice icon, then choose **Settings**. You can also open **Settings → Reader → AI narration**.
+2. Enter your Gemini API key, ElevenLabs API key, Gemini model, ElevenLabs model, and a default ElevenLabs voice ID. Use **Load available voices** to choose a narrator voice from your ElevenLabs account.
+3. Choose **Narration reading order**: **Auto** lets Gemini detect each page, while **Right to left**, **Left to right**, and **Top to bottom** force the same direction for both panels and bubbles. Save the settings and enable **AI narration**.
+4. Start reading. The current page is prepared first; the app then prepares the following pages until the chapter is complete. The floating control shows progress and can pause or resume narration.
+
+The narration dialog includes controls for playback speed, the gap between dialogue clips, character-voice correction, retrying failed pages, and **Usage & cost**. The usage view tracks Gemini tokens used by this app after the feature is enabled and fetches the current ElevenLabs credit balance. Gemini's full project invoice remains in Google AI Studio or Google Cloud Billing.
+
+For right-to-left manga, narration follows panels before individual bubbles: it finishes the right panel before moving to the left. Changing the narration reading-order option automatically invalidates incompatible cached pages; use **Reset chapter narration** if you also want to discard existing audio and speaker corrections. See [NARRATION.md](./NARRATION.md) for detailed behavior and troubleshooting.
+
+### Keep keys private
+
+Never commit, post, or share your API keys. For an open-source build, enter keys only through the app's settings screen; they are stored on the device with Android Keystore encryption and are excluded from manga backups.
+
+Developers can copy `.env.example` to a local root `.env` for a private build, but `.env` is ignored by Git and must never be included in a public APK or commit. A key embedded in an APK can be extracted by anyone who obtains that APK.
 
 ## Download
 Get the app from our [releases page](https://github.com/tachiyomiorg/tachiyomi/releases).

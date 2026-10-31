@@ -2,6 +2,7 @@ package tachiyomi.domain.manga.model
 
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import kotlinx.serialization.json.JsonObject
 import tachiyomi.core.preference.TriState
 import java.io.Serializable
 import java.time.Instant
@@ -29,6 +30,7 @@ data class Manga(
     val initialized: Boolean,
     val lastModifiedAt: Long,
     val favoriteModifiedAt: Long?,
+    val memo: JsonObject = JsonObject(emptyMap()),
 ) : Serializable {
 
     val expectedNextUpdate: Instant?

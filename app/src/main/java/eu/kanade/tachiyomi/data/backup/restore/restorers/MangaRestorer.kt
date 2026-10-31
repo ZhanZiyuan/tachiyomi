@@ -99,6 +99,7 @@ class MangaRestorer(
             thumbnailUrl = newer.thumbnailUrl,
             status = newer.status,
             initialized = this.initialized || newer.initialized,
+            memo = newer.memo.takeIf { it.isNotEmpty() } ?: this.memo,
         )
     }
 
@@ -125,6 +126,7 @@ class MangaRestorer(
                 dateAdded = manga.dateAdded,
                 mangaId = manga.id,
                 updateStrategy = manga.updateStrategy.let(UpdateStrategyColumnAdapter::encode),
+                memo = manga.memo.toString(),
             )
         }
         return manga
@@ -199,6 +201,7 @@ class MangaRestorer(
                     chapter.sourceOrder,
                     chapter.dateFetch,
                     chapter.dateUpload,
+                    chapter.memo.toString(),
                 )
             }
         }
@@ -220,6 +223,7 @@ class MangaRestorer(
                     dateFetch = null,
                     dateUpload = null,
                     chapterId = chapter.id,
+                    memo = chapter.memo.toString(),
                 )
             }
         }
@@ -252,6 +256,7 @@ class MangaRestorer(
                 coverLastModified = manga.coverLastModified,
                 dateAdded = manga.dateAdded,
                 updateStrategy = manga.updateStrategy,
+                memo = manga.memo.toString(),
             )
             mangasQueries.selectLastInsertedRowId()
         }

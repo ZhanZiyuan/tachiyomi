@@ -14,4 +14,12 @@
                 tools:ignore="AcceptsUserCertificates" />
         </trust-anchors>
     </base-config>
+    <!-- Narration credentials only use HTTPS with the system CA store. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">generativelanguage.googleapis.com</domain>
+        <domain includeSubdomains="false">api.elevenlabs.io</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>

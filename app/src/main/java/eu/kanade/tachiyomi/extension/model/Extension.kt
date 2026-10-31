@@ -43,6 +43,8 @@ sealed class Extension {
         val apkName: String,
         val iconUrl: String,
         val repoUrl: String,
+        val apkUrl: String? = null,
+        val signingKey: String? = null,
     ) : Extension() {
 
         data class Source(

@@ -9,8 +9,7 @@ import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.awaitSuccess
-import eu.kanade.tachiyomi.network.parseAs
-import kotlinx.serialization.Serializable
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.preference.Preference
@@ -35,25 +34,54 @@ internal class ExtensionApi {
 
     suspend fun findExtensions(): List<Extension.Available> {
         return withIOContext {
-            sourcePreferences.extensionRepos().get().flatMap { getExtensions(it) }
+            sourcePreferences.extensionRepos().get()
+                .flatMap { getExtensions(it) }
+                .groupBy { it.pkgName }
+                .values
+                .map { versions ->
+                    versions.maxWith(compareBy<Extension.Available> { it.libVersion }.thenBy { it.versionCode })
+                }
         }
     }
 
-    private suspend fun getExtensions(repoBaseUrl: String): List<Extension.Available> {
+    private suspend fun getExtensions(repoUrl: String): List<Extension.Available> {
         return try {
-            val response = networkService.client
-                .newCall(GET("$repoBaseUrl/index.min.json"))
-                .awaitSuccess()
-
-            with(json) {
-                response
-                    .parseAs<List<ExtensionJsonObject>>()
-                    .toExtensions(repoBaseUrl)
+            val indexUrl = ExtensionRepoUrl.indexUrl(repoUrl)
+            val bytes = fetchCatalog(indexUrl)
+            val supportedVersions = ExtensionLoader.LIB_VERSION_MIN..ExtensionLoader.LIB_VERSION_MAX
+            if (indexUrl.endsWith("/index.pb")) {
+                val store = ExtensionCatalog.decodeStore(bytes)
+                val list = store.extensionListUrl?.let {
+                    ExtensionCatalog.decodeList(fetchCatalog(it))
+                } ?: requireNotNull(store.extensionList)
+                ExtensionCatalog.toExtensions(store, list, repoUrl, supportedVersions)
+            } else {
+                ExtensionCatalog.legacyToExtensions(
+                    ExtensionCatalog.decodeLegacy(bytes, json),
+                    indexUrl.removeSuffix("/index.min.json"),
+                    supportedVersions,
+                )
             }
-        } catch (e: Throwable) {
-            logcat(LogPriority.ERROR, e) { "Failed to get extensions from $repoBaseUrl" }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to get extensions from $repoUrl" }
             emptyList()
         }
+    }
+
+    private suspend fun fetchCatalog(url: String): ByteArray {
+        require(ExtensionCatalog.isSecureUrl(url)) { "Insecure extension catalog URL" }
+        // HTTPS redirects are allowed (GitHub uses them), but never HTTPS-to-HTTP redirects.
+        return networkService.client.newBuilder().followSslRedirects(false).build()
+            .newCall(GET(url)).awaitSuccess().use { response ->
+                require(response.request.url.isHttps) { "Insecure extension catalog redirect" }
+                val body = response.body
+                require(body.contentLength() <= ExtensionCatalog.MAX_CATALOG_BYTES) {
+                    "Extension catalog exceeds size limit"
+                }
+                body.byteStream().use { ExtensionCatalog.readBounded(it) }
+            }
     }
 
     suspend fun checkForUpdates(
@@ -96,63 +124,7 @@ internal class ExtensionApi {
         return extensionsWithUpdate
     }
 
-    private fun List<ExtensionJsonObject>.toExtensions(repoUrl: String): List<Extension.Available> {
-        return this
-            .filter {
-                val libVersion = it.extractLibVersion()
-                libVersion >= ExtensionLoader.LIB_VERSION_MIN && libVersion <= ExtensionLoader.LIB_VERSION_MAX
-            }
-            .map {
-                Extension.Available(
-                    name = it.name.substringAfter("Tachiyomi: "),
-                    pkgName = it.pkg,
-                    versionName = it.version,
-                    versionCode = it.code,
-                    libVersion = it.extractLibVersion(),
-                    lang = it.lang,
-                    isNsfw = it.nsfw == 1,
-                    sources = it.sources?.map(extensionSourceMapper).orEmpty(),
-                    apkName = it.apk,
-                    iconUrl = "$repoUrl/icon/${it.pkg}.png",
-                    repoUrl = repoUrl,
-                )
-            }
-    }
-
     fun getApkUrl(extension: Extension.Available): String {
-        return "${extension.repoUrl}/apk/${extension.apkName}"
+        return extension.apkUrl ?: "${extension.repoUrl}/apk/${extension.apkName}"
     }
-
-    private fun ExtensionJsonObject.extractLibVersion(): Double {
-        return version.substringBeforeLast('.').toDouble()
-    }
-}
-
-@Serializable
-private data class ExtensionJsonObject(
-    val name: String,
-    val pkg: String,
-    val apk: String,
-    val lang: String,
-    val code: Long,
-    val version: String,
-    val nsfw: Int,
-    val sources: List<ExtensionSourceJsonObject>?,
-)
-
-@Serializable
-private data class ExtensionSourceJsonObject(
-    val id: Long,
-    val lang: String,
-    val name: String,
-    val baseUrl: String,
-)
-
-private val extensionSourceMapper: (ExtensionSourceJsonObject) -> Extension.Available.Source = {
-    Extension.Available.Source(
-        id = it.id,
-        lang = it.lang,
-        name = it.name,
-        baseUrl = it.baseUrl,
-    )
 }

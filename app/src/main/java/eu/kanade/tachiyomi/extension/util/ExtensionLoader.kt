@@ -6,7 +6,6 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
-import dalvik.system.PathClassLoader
 import eu.kanade.domain.extension.interactor.TrustExtension
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -14,6 +13,7 @@ import eu.kanade.tachiyomi.extension.model.LoadResult
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
+import eu.kanade.tachiyomi.source.asCatalogueSource
 import eu.kanade.tachiyomi.util.lang.Hash
 import eu.kanade.tachiyomi.util.storage.copyAndSetReadOnlyTo
 import kotlinx.coroutines.async
@@ -51,7 +51,7 @@ internal object ExtensionLoader {
     private const val METADATA_SOURCE_FACTORY = "tachiyomi.extension.factory"
     private const val METADATA_NSFW = "tachiyomi.extension.nsfw"
     const val LIB_VERSION_MIN = 1.4
-    const val LIB_VERSION_MAX = 1.5
+    const val LIB_VERSION_MAX = 1.6
 
     @Suppress("DEPRECATION")
     private val PACKAGE_FLAGS = PackageManager.GET_CONFIGURATIONS or
@@ -140,7 +140,7 @@ internal object ExtensionLoader {
 
                 val path = it.absolutePath
                 pkgManager.getPackageArchiveInfo(path, PACKAGE_FLAGS)
-                    ?.apply { applicationInfo.fixBasePaths(path) }
+                    ?.apply { applicationInfo?.fixBasePaths(path) }
             }
             ?.filter { isPackageAnExtension(it) }
             ?.map { ExtensionInfo(packageInfo = it, isShared = false) }
@@ -191,7 +191,7 @@ internal object ExtensionLoader {
             context.packageManager.getPackageArchiveInfo(privateExtensionFile.absolutePath, PACKAGE_FLAGS)
                 ?.takeIf { isPackageAnExtension(it) }
                 ?.let {
-                    it.applicationInfo.fixBasePaths(privateExtensionFile.absolutePath)
+                    it.applicationInfo?.fixBasePaths(privateExtensionFile.absolutePath)
                     ExtensionInfo(
                         packageInfo = it,
                         isShared = false,
@@ -226,10 +226,12 @@ internal object ExtensionLoader {
     private fun loadExtension(context: Context, extensionInfo: ExtensionInfo): LoadResult {
         val pkgManager = context.packageManager
         val pkgInfo = extensionInfo.packageInfo
-        val appInfo = pkgInfo.applicationInfo
+        val appInfo = pkgInfo.applicationInfo ?: return LoadResult.Error
+        val metaData = appInfo.metaData ?: return LoadResult.Error
         val pkgName = pkgInfo.packageName
 
-        val extName = pkgManager.getApplicationLabel(appInfo).toString().substringAfter("Tachiyomi: ")
+        val extName = metaData.getString("tachiyomix.name")
+            ?: pkgManager.getApplicationLabel(appInfo).toString().substringAfter("Tachiyomi: ")
         val versionName = pkgInfo.versionName
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
 
@@ -239,7 +241,9 @@ internal object ExtensionLoader {
         }
 
         // Validate lib version
-        val libVersion = versionName.substringBeforeLast('.').toDoubleOrNull()
+        val libVersion = metaData.getFloat("tachiyomix.extensionLib")
+            .takeUnless { it == 0.0f }?.toString()?.toDoubleOrNull()
+            ?: versionName.substringBeforeLast('.').toDoubleOrNull()
         if (libVersion == null || libVersion < LIB_VERSION_MIN || libVersion > LIB_VERSION_MAX) {
             logcat(LogPriority.WARN) {
                 "Lib version is $libVersion, while only versions " +
@@ -265,20 +269,21 @@ internal object ExtensionLoader {
             return LoadResult.Untrusted(extension)
         }
 
-        val isNsfw = appInfo.metaData.getInt(METADATA_NSFW) == 1
+        val isNsfw = metaData.getInt(METADATA_NSFW) == 1 ||
+            metaData.getInt("tachiyomix.contentWarning") >= 1
         if (!loadNsfwSource && isNsfw) {
             logcat(LogPriority.WARN) { "NSFW extension $pkgName not allowed" }
             return LoadResult.Error
         }
 
         val classLoader = try {
-            PathClassLoader(appInfo.sourceDir, null, context.classLoader)
+            ExtensionClassLoader(appInfo.sourceDir, context.classLoader)
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Extension load error: $extName ($pkgName)" }
             return LoadResult.Error
         }
 
-        val sources = appInfo.metaData.getString(METADATA_SOURCE_CLASS)!!
+        val sources = (metaData.getString(METADATA_SOURCE_CLASS) ?: return LoadResult.Error)
             .split(";")
             .map {
                 val sourceClass = it.trim()
@@ -301,7 +306,8 @@ internal object ExtensionLoader {
                 }
             }
 
-        val langs = sources.filterIsInstance<CatalogueSource>()
+        val compatibleSources = sources.map { if (libVersion >= 1.6) it.asCatalogueSource() else it }
+        val langs = compatibleSources.filterIsInstance<CatalogueSource>()
             .map { it.lang }
             .toSet()
         val lang = when (langs.size) {
@@ -318,8 +324,8 @@ internal object ExtensionLoader {
             libVersion = libVersion,
             lang = lang,
             isNsfw = isNsfw,
-            sources = sources,
-            pkgFactory = appInfo.metaData.getString(METADATA_SOURCE_FACTORY),
+            sources = compatibleSources,
+            pkgFactory = metaData.getString(METADATA_SOURCE_FACTORY),
             icon = appInfo.loadIcon(pkgManager),
             isShared = extensionInfo.isShared,
         )
@@ -363,10 +369,16 @@ internal object ExtensionLoader {
      * @param pkgInfo The package info of the application.
      * @return List SHA256 digest of the signatures
      */
-    private fun getSignatures(pkgInfo: PackageInfo): List<String>? {
+    fun getArchivePackageInfo(context: Context, file: File): PackageInfo? =
+        context.packageManager.getPackageArchiveInfo(file.absolutePath, PACKAGE_FLAGS)
+            ?.takeIf { isPackageAnExtension(it) }
+
+    fun getSignatures(pkgInfo: PackageInfo): List<String>? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val signingInfo = pkgInfo.signingInfo
-            if (signingInfo.hasMultipleSigners()) {
+            if (signingInfo == null) {
+                null
+            } else if (signingInfo.hasMultipleSigners()) {
                 signingInfo.apkContentsSigners
             } else {
                 signingInfo.signingCertificateHistory

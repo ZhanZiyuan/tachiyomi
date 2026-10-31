@@ -1,6 +1,7 @@
 package tachiyomi.domain.manga.model
 
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import kotlinx.serialization.json.JsonObject
 
 data class MangaUpdate(
     val id: Long,
@@ -23,6 +24,7 @@ data class MangaUpdate(
     val thumbnailUrl: String? = null,
     val updateStrategy: UpdateStrategy? = null,
     val initialized: Boolean? = null,
+    val memo: JsonObject? = null,
 )
 
 fun Manga.toMangaUpdate(): MangaUpdate {
@@ -47,5 +49,6 @@ fun Manga.toMangaUpdate(): MangaUpdate {
         thumbnailUrl = thumbnailUrl,
         updateStrategy = updateStrategy,
         initialized = initialized,
+        memo = memo,
     )
 }

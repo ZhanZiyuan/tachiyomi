@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.extension.util.ExtensionInstallReceiver
 import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
 import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,10 +65,8 @@ class ExtensionManager(
     fun getAppIconForSource(sourceId: Long): Drawable? {
         val pkgName = _installedExtensionsFlow.value.find { ext -> ext.sources.any { it.id == sourceId } }?.pkgName
         if (pkgName != null) {
-            return iconMap[pkgName] ?: iconMap.getOrPut(pkgName) {
-                ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)!!.applicationInfo
-                    .loadIcon(context.packageManager)
-            }
+            return iconMap[pkgName] ?: ExtensionLoader.getExtensionPackageInfoFromPkgName(context, pkgName)
+                ?.applicationInfo?.loadIcon(context.packageManager)?.also { iconMap[pkgName] = it }
         }
         return null
     }
@@ -117,6 +116,8 @@ class ExtensionManager(
     suspend fun findAvailableExtensions() {
         val extensions: List<Extension.Available> = try {
             api.findExtensions()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
             withUIContext { context.toast(MR.strings.extension_api_error) }

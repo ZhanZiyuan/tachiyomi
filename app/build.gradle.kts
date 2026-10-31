@@ -1,9 +1,11 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("com.mikepenz.aboutlibraries.plugin")
     kotlin("android")
+    alias(kotlinx.plugins.compose.compiler)
     kotlin("plugin.serialization")
     id("com.github.zellius.shortcut-helper")
 }
@@ -12,20 +14,33 @@ shortcutHelper.setFilePath("./shortcuts.xml")
 
 val SUPPORTED_ABIS = setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
 
+// Personal builds may include local defaults. No credentials are stored in source control.
+val narrationCredentials = Properties().apply {
+    rootProject.file(".env").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}
+fun narrationBuildConfigString(name: String): String {
+    val value = providers.environmentVariable(name).orNull ?: narrationCredentials.getProperty(name, "")
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"")
+        .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\""
+}
+
 android {
     namespace = "eu.kanade.tachiyomi"
 
     defaultConfig {
-        applicationId = "eu.kanade.tachiyomi"
+        applicationId = "eu.kanade.tachiyomi.narration"
 
-        versionCode = 119
-        versionName = "0.15.3"
+        versionCode = 121
+        versionName = "0.15.3-narration.2"
+        resValue("string", "app_name", "Tachiyomi Narration")
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime()}\"")
         buildConfigField("boolean", "INCLUDE_UPDATER", "false")
         buildConfigField("boolean", "PREVIEW", "false")
+        buildConfigField("String", "NARRATION_GEMINI_KEY", narrationBuildConfigString("GEMINI_API_KEY"))
+        buildConfigField("String", "NARRATION_ELEVENLABS_KEY", narrationBuildConfigString("ELEVENLABS_API_KEY"))
 
         ndk {
             abiFilters += SUPPORTED_ABIS
@@ -85,7 +100,7 @@ android {
 
     productFlavors {
         create("standard") {
-            buildConfigField("boolean", "INCLUDE_UPDATER", "true")
+            buildConfigField("boolean", "INCLUDE_UPDATER", "false")
             dimension = "default"
         }
         create("dev") {
@@ -104,6 +119,7 @@ android {
                 "META-INF/LICENSE.txt",
                 "META-INF/README.md",
                 "META-INF/NOTICE",
+                "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
                 "META-INF/*.kotlin_module",
             ),
         )
@@ -129,9 +145,6 @@ android {
         checkReleaseBuilds = false
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = compose.versions.compiler.get()
-    }
 }
 
 dependencies {
@@ -268,8 +281,8 @@ androidComponents {
 tasks {
     // See https://kotlinlang.org/docs/reference/experimental.html#experimental-status-of-experimental-api(-markers)
     withType<KotlinCompile> {
-        kotlinOptions.freeCompilerArgs += listOf(
-            "-Xcontext-receivers",
+        compilerOptions.freeCompilerArgs.addAll(
+            "-Xcontext-parameters",
             "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
             "-opt-in=androidx.compose.material.ExperimentalMaterialApi",
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
@@ -287,12 +300,12 @@ tasks {
         )
 
         if (project.findProperty("tachiyomi.enableComposeCompilerMetrics") == "true") {
-            kotlinOptions.freeCompilerArgs += listOf(
+            compilerOptions.freeCompilerArgs.addAll(
                 "-P",
                 "plugin:androidx.compose.compiler.plugins.kotlin:reportsDestination=" +
                     project.layout.buildDirectory.dir("compose_metrics").get().asFile.absolutePath,
             )
-            kotlinOptions.freeCompilerArgs += listOf(
+            compilerOptions.freeCompilerArgs.addAll(
                 "-P",
                 "plugin:androidx.compose.compiler.plugins.kotlin:metricsDestination=" +
                     project.layout.buildDirectory.dir("compose_metrics").get().asFile.absolutePath,

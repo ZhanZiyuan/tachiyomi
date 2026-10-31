@@ -1,6 +1,7 @@
 package tachiyomi.data.manga
 
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import tachiyomi.data.SourceMemoAdapter
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.manga.model.Manga
 
@@ -28,6 +29,7 @@ object MangaMapper {
         calculateInterval: Long,
         lastModifiedAt: Long,
         favoriteModifiedAt: Long?,
+        memo: String,
     ): Manga = Manga(
         id = id,
         source = source,
@@ -51,6 +53,7 @@ object MangaMapper {
         initialized = initialized,
         lastModifiedAt = lastModifiedAt,
         favoriteModifiedAt = favoriteModifiedAt,
+        memo = SourceMemoAdapter.decode(memo),
     )
 
     fun mapLibraryManga(
@@ -76,6 +79,7 @@ object MangaMapper {
         calculateInterval: Long,
         lastModifiedAt: Long,
         favoriteModifiedAt: Long?,
+        memo: String,
         totalCount: Long,
         readCount: Double,
         latestUpload: Long,
@@ -107,6 +111,7 @@ object MangaMapper {
             calculateInterval,
             lastModifiedAt,
             favoriteModifiedAt,
+            memo,
         ),
         category = category,
         totalChapters = totalCount,

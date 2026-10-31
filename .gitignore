@@ -15,3 +15,14 @@ app/**/output.json
 
 # Unnecessary file
 *.swp
+
+# Local narration configuration
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+/dist/
+
+.kotlin/

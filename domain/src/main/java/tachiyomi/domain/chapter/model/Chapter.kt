@@ -1,5 +1,7 @@
 package tachiyomi.domain.chapter.model
 
+import kotlinx.serialization.json.JsonObject
+
 data class Chapter(
     val id: Long,
     val mangaId: Long,
@@ -14,6 +16,7 @@ data class Chapter(
     val chapterNumber: Double,
     val scanlator: String?,
     val lastModifiedAt: Long,
+    val memo: JsonObject = JsonObject(emptyMap()),
 ) {
     val isRecognizedNumber: Boolean
         get() = chapterNumber >= 0f
@@ -25,6 +28,7 @@ data class Chapter(
             dateUpload = other.dateUpload,
             chapterNumber = other.chapterNumber,
             scanlator = other.scanlator?.ifBlank { null },
+            memo = other.memo,
         )
     }
 

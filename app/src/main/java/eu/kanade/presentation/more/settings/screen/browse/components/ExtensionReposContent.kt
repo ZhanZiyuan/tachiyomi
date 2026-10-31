@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import eu.kanade.tachiyomi.extension.api.ExtensionRepoUrl
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import kotlinx.collections.immutable.ImmutableSet
 import tachiyomi.i18n.MR
@@ -83,7 +84,7 @@ private fun ExtensionRepoListItem(
         ) {
             IconButton(
                 onClick = {
-                    val url = "$repo/index.min.json"
+                    val url = ExtensionRepoUrl.indexUrl(repo)
                     context.copyToClipboard(url, url)
                 },
             ) {

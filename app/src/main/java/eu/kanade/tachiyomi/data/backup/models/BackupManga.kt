@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup.models
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
+import tachiyomi.data.SourceMemoAdapter
 import tachiyomi.domain.manga.model.Manga
 
 @Suppress("DEPRECATION")
@@ -38,6 +39,7 @@ data class BackupManga(
     @ProtoNumber(105) var updateStrategy: UpdateStrategy = UpdateStrategy.ALWAYS_UPDATE,
     @ProtoNumber(106) var lastModifiedAt: Long = 0,
     @ProtoNumber(107) var favoriteModifiedAt: Long? = null,
+    @ProtoNumber(112) var memo: ByteArray = "{}".toByteArray(),
 ) {
     fun getMangaImpl(): Manga {
         return Manga.create().copy(
@@ -57,6 +59,7 @@ data class BackupManga(
             updateStrategy = this@BackupManga.updateStrategy,
             lastModifiedAt = this@BackupManga.lastModifiedAt,
             favoriteModifiedAt = this@BackupManga.favoriteModifiedAt,
+            memo = SourceMemoAdapter.decode(this@BackupManga.memo.decodeToString()),
         )
     }
 }

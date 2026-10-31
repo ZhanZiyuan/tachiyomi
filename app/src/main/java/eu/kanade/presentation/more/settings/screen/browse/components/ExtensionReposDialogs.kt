@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import eu.kanade.tachiyomi.extension.api.ExtensionRepoUrl
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.coroutines.delay
 import tachiyomi.i18n.MR
@@ -29,7 +30,7 @@ fun ExtensionRepoCreateDialog(
     var name by remember { mutableStateOf("") }
 
     val focusRequester = remember { FocusRequester() }
-    val nameAlreadyExists = remember(name) { repos.contains(name) }
+    val nameAlreadyExists = remember(name, repos) { repos.contains(ExtensionRepoUrl.normalize(name)) }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,

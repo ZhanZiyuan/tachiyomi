@@ -203,7 +203,7 @@ private fun ExtensionContent(
             items(
                 items = items,
                 contentType = { "item" },
-                key = { "extension-${it.hashCode()}" },
+                key = { it.key },
             ) { item ->
                 ExtensionItem(
                     modifier = Modifier.animateItemPlacement(),

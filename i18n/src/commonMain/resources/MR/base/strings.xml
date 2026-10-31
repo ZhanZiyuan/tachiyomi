@@ -325,6 +325,7 @@
     <string name="ext_nsfw_warning">Sources from this extension may contain NSFW (18+) content</string>
     <string name="ext_permission_install_apps_warning">Permissions are needed to install extensions. Tap here to grant.</string>
     <string name="ext_install_service_notif">Installing extension…</string>
+    <string name="ext_verification_error">Extension verification failed. Refresh the extension catalog and try again.</string>
     <string name="ext_installer_pref">Installer</string>
     <string name="ext_installer_legacy">Legacy</string>
     <string name="ext_installer_packageinstaller" translatable="false">PackageInstaller</string>
@@ -339,7 +340,7 @@
     <string name="information_empty_repos">You have no repos set.</string>
     <string name="action_add_repo">Add repo</string>
     <string name="label_add_repo_input">Repo URL</string>
-    <string name="action_add_repo_message">Add additional repos to Tachiyomi. This should be a URL that ends with \"index.min.json\".</string>
+    <string name="action_add_repo_message">Add additional repos to Tachiyomi. This should be a URL that ends with \"index.pb\" or \"index.min.json\".</string>
     <string name="error_repo_exists">This repo already exists!</string>
     <string name="action_delete_repo">Delete repo</string>
     <string name="invalid_repo_name">Invalid repo URL</string>

@@ -16,6 +16,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View.LAYER_TYPE_HARDWARE
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
@@ -61,11 +62,16 @@ import eu.kanade.tachiyomi.ui.reader.ReaderViewModel.SetAsCoverResult.Success
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.narration.NarrationController
+import eu.kanade.tachiyomi.ui.reader.narration.NarrationFloatingControl
+import eu.kanade.tachiyomi.ui.reader.narration.narrationUsesVerticalPager
+import eu.kanade.tachiyomi.ui.reader.narration.showNarrationDialog
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.hasDisplayCutout
 import eu.kanade.tachiyomi.util.system.isNightMode
@@ -107,6 +113,7 @@ class ReaderActivity : BaseActivity() {
 
     private val readerPreferences = Injekt.get<ReaderPreferences>()
     private val preferences = Injekt.get<BasePreferences>()
+    private val narration by lazy { NarrationController(this) }
 
     lateinit var binding: ReaderActivityBinding
 
@@ -165,6 +172,7 @@ class ReaderActivity : BaseActivity() {
 
         config = ReaderConfig()
         initializeMenu()
+        NarrationFloatingControl(this, narration, binding.root as FrameLayout)
 
         // Finish when incognito mode is disabled
         preferences.incognitoMode().changes()
@@ -182,7 +190,17 @@ class ReaderActivity : BaseActivity() {
             .map { it.manga }
             .distinctUntilChanged()
             .filterNotNull()
-            .onEach { updateViewer() }
+            .onEach {
+                if (!useVerticalPagedNarrationDefault()) updateViewer()
+            }
+            .launchIn(lifecycleScope)
+
+        narration.state
+            .map { it.enabled }
+            .distinctUntilChanged()
+            .onEach { enabled ->
+                if (enabled) useVerticalPagedNarrationDefault()
+            }
             .launchIn(lifecycleScope)
 
         viewModel.state
@@ -222,6 +240,7 @@ class ReaderActivity : BaseActivity() {
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
     override fun onDestroy() {
+        narration.close()
         super.onDestroy()
         viewModel.state.value.viewer?.destroy()
         config = null
@@ -230,6 +249,7 @@ class ReaderActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        narration.suspendForBackground()
         viewModel.flushReadTimer()
         super.onPause()
     }
@@ -240,6 +260,7 @@ class ReaderActivity : BaseActivity() {
      */
     override fun onResume() {
         super.onResume()
+        narration.resumeFromBackground()
         viewModel.restartReadTimer()
         setMenuVisibility(viewModel.state.value.menuVisible)
     }
@@ -387,6 +408,7 @@ class ReaderActivity : BaseActivity() {
                     menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
                 },
                 onClickSettings = viewModel::openSettingsDialog,
+                onClickNarration = { showNarrationDialog(this@ReaderActivity, narration) },
             )
 
             if (flashOnPageChange) {
@@ -519,6 +541,19 @@ class ReaderActivity : BaseActivity() {
         startPostponedEnterTransition()
     }
 
+    /** Narration works best with one page held on screen; preserve any explicit per-manga choice. */
+    private fun useVerticalPagedNarrationDefault(): Boolean {
+        if (viewModel.manga == null || !narrationUsesVerticalPager(
+                narration.state.value.enabled,
+                viewModel.getMangaReadingMode(resolveDefault = false),
+            )
+        ) {
+            return false
+        }
+        viewModel.setMangaReadingMode(ReadingMode.VERTICAL)
+        return true
+    }
+
     private fun openMangaScreen() {
         viewModel.manga?.id?.let { id ->
             startActivity(
@@ -636,6 +671,36 @@ class ReaderActivity : BaseActivity() {
      */
     fun onPageSelected(page: ReaderPage) {
         viewModel.onPageSelected(page)
+        val viewer = viewModel.state.value.viewer
+        if (viewer is WebtoonViewer) {
+            viewer.updateNarrationViewport()
+        } else {
+            viewModel.state.value.manga?.id?.let {
+                narration.selectPage(
+                    it,
+                    page,
+                    if (viewModel.getMangaReadingMode() == ReadingMode.RIGHT_TO_LEFT.flagValue) "right-to-left" else "left-to-right",
+                    scrolling = false,
+                )
+            }
+        }
+    }
+
+    /** A viewport event comes from the page under the reading zone, not the last visible page. */
+    fun onNarrationViewport(page: ReaderPage, top: Float, bottom: Float) {
+        viewModel.state.value.manga?.id?.let {
+            narration.selectPage(
+                it,
+                page,
+                "top-to-bottom panels; infer RTL manga or LTR webtoon bubble order",
+                scrolling = true,
+            )
+            narration.viewport(top, bottom)
+        }
+    }
+
+    fun onNarrationViewportUnavailable() {
+        narration.clearViewport()
     }
 
     /**
