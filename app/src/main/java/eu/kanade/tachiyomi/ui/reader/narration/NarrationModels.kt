@@ -44,6 +44,8 @@ data class NarrationPage(
     val lines: List<NarrationLine>,
     /** Visual panel/bubble order detected for this page, independent of the reader's paging direction. */
     val readingDirection: String = "unknown",
+    /** The user-selected narration-order mode that produced this cached page. */
+    val readingOrderMode: String = "auto",
     val characters: List<NarrationCharacter> = emptyList(),
 )
 
@@ -156,6 +158,23 @@ internal fun normalizeNarrationReadingDirection(value: String, fallback: String)
         "right-to-left", "rtl" -> "right-to-left"
         "top-to-bottom", "vertical", "ttb" -> "top-to-bottom"
         else -> normalizedFallback
+    }
+}
+
+internal fun normalizeNarrationReadingOrder(value: String): String = when (value.lowercase().trim()) {
+    "right-to-left", "rtl" -> "right-to-left"
+    "left-to-right", "ltr" -> "left-to-right"
+    "top-to-bottom", "vertical", "ttb" -> "top-to-bottom"
+    else -> "auto"
+}
+
+/** A forced narration order always wins over reader paging and Gemini's detected direction. */
+internal fun narrationEffectiveReadingDirection(order: String, readerFallback: String): String {
+    val normalizedOrder = normalizeNarrationReadingOrder(order)
+    return if (normalizedOrder == "auto") {
+        normalizeNarrationReadingDirection("unknown", readerFallback)
+    } else {
+        normalizedOrder
     }
 }
 

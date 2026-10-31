@@ -34,12 +34,12 @@ Both providers can charge for usage. Gemini receives the page images and context
 
 1. Open a chapter, tap the narration/voice icon, then choose **Settings**. You can also open **Settings → Reader → AI narration**.
 2. Enter your Gemini API key, ElevenLabs API key, Gemini model, ElevenLabs model, and a default ElevenLabs voice ID. Use **Load available voices** to choose a narrator voice from your ElevenLabs account.
-3. Save the settings and enable **AI narration**.
+3. Choose **Narration reading order**: **Auto** lets Gemini detect each page, while **Right to left**, **Left to right**, and **Top to bottom** force the same direction for both panels and bubbles. Save the settings and enable **AI narration**.
 4. Start reading. The current page is prepared first; the app then prepares the following pages until the chapter is complete. The floating control shows progress and can pause or resume narration.
 
 The narration dialog includes controls for playback speed, the gap between dialogue clips, character-voice correction, retrying failed pages, and **Usage & cost**. The usage view tracks Gemini tokens used by this app after the feature is enabled and fetches the current ElevenLabs credit balance. Gemini's full project invoice remains in Google AI Studio or Google Cloud Billing.
 
-For right-to-left manga, narration follows panels before individual bubbles: it finishes the right panel before moving to the left. If a chapter was analyzed before an update or its order is wrong, use **Reset chapter narration** to reanalyze it. See [NARRATION.md](./NARRATION.md) for detailed behavior and troubleshooting.
+For right-to-left manga, narration follows panels before individual bubbles: it finishes the right panel before moving to the left. Changing the narration reading-order option automatically invalidates incompatible cached pages; use **Reset chapter narration** if you also want to discard existing audio and speaker corrections. See [NARRATION.md](./NARRATION.md) for detailed behavior and troubleshooting.
 
 ### Keep keys private
 

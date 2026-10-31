@@ -259,7 +259,7 @@ class NarrationController(context: Context) {
     fun resumeFromBackground() {
         foreground = true
         val nextConfiguration = listOf(
-            settings.geminiModel, settings.speechModel, settings.defaultVoiceId,
+            settings.geminiModel, settings.speechModel, settings.defaultVoiceId, settings.narrationReadingOrder,
             settings.geminiKey, settings.elevenLabsKey,
         ).joinToString("|").hashCode().toString()
         if (configuration.isNotEmpty() && configuration != nextConfiguration) {
@@ -784,7 +784,9 @@ class NarrationController(context: Context) {
     ): Pair<NarrationPage, List<NarrationCharacter>> {
         val currentImage = readPage(current)
         var bank = withContext(Dispatchers.IO) { store.characters(manga) }
-        val existing = withContext(Dispatchers.IO) { store.page(manga, chapter, current.index, currentImage.hash) }
+        val existing = withContext(Dispatchers.IO) {
+            store.page(manga, chapter, current.index, currentImage.hash, settings.narrationReadingOrder)
+        }
         if (existing != null) return existing to bank
 
         // One request per page keeps a transient Gemini failure isolated and lets the reader move on.
@@ -807,6 +809,7 @@ class NarrationController(context: Context) {
                 batch.map { it.image },
                 bank,
                 sceneContext,
+                settings.narrationReadingOrder,
                 readingDirection,
             )
             settings.recordGeminiUsage(settings.geminiModel, response.usage)
@@ -854,11 +857,14 @@ class NarrationController(context: Context) {
                         imageHash = image.hash,
                         lines = normalized,
                         readingDirection = detectedDirection,
+                        readingOrderMode = settings.narrationReadingOrder,
                     ),
                 )
             }
         }
-        val result = withContext(Dispatchers.IO) { store.page(manga, chapter, current.index, currentImage.hash) }
+        val result = withContext(Dispatchers.IO) {
+            store.page(manga, chapter, current.index, currentImage.hash, settings.narrationReadingOrder)
+        }
             ?: throw IllegalStateException("Unable to save page analysis.")
         return result to bank
     }

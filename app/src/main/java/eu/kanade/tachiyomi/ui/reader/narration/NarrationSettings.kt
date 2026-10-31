@@ -34,6 +34,11 @@ class NarrationSettings(context: Context) {
         get() = preferences.getInt("pause_between_lines_ms", 250).coerceIn(0, 3_000)
         set(value) { preferences.edit().putInt("pause_between_lines_ms", value.coerceIn(0, 3_000)).apply() }
 
+    /** Auto follows the analyzed layout; the other values force panel and bubble direction together. */
+    var narrationReadingOrder: String
+        get() = normalizeNarrationReadingOrder(preferences.getString("narration_reading_order", "auto").orEmpty())
+        set(value) { preferences.edit().putString("narration_reading_order", normalizeNarrationReadingOrder(value)).apply() }
+
     var geminiKey: String
         get() = readSecret("gemini", BuildConfig.NARRATION_GEMINI_KEY)
         set(value) { writeSecret("gemini", value.trim()) }

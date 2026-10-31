@@ -5,6 +5,11 @@
     <string name="narration_settings_explanation">When enabled, each manga page is sent directly to Gemini, then its dialogue is sent to ElevenLabs for speech. The visible page is handled first and the rest continues in the background, so you can read while it prepares. A failed page is skipped and can be retried from the reader. Generation uses your API quota. Audio is saved on this device for replay.</string>
     <string name="narration_enable">Enable AI narration</string>
     <string name="narration_auto_play">Play automatically while reading</string>
+    <string name="narration_reading_order">Narration reading order</string>
+    <string name="narration_reading_order_auto">Auto — detect each page</string>
+    <string name="narration_reading_order_rtl">Right to left — force panels and bubbles</string>
+    <string name="narration_reading_order_ltr">Left to right — force panels and bubbles</string>
+    <string name="narration_reading_order_ttb">Top to bottom — force panels and bubbles</string>
     <string name="narration_playback_speed">Playback speed</string>
     <string name="narration_pause_between_lines">Pause between dialogue</string>
     <string name="narration_control_value">%1$s: %2$s</string>

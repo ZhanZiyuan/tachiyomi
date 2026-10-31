@@ -26,10 +26,19 @@ class NarrationStore(context: Context) {
         write(File(series(mangaId), "characters.json"), json.encodeToString(characters))
     }
 
-    fun page(mangaId: Long, chapterId: Long, pageIndex: Int, imageHash: String): NarrationPage? = synchronized(lock) {
+    fun page(
+        mangaId: Long,
+        chapterId: Long,
+        pageIndex: Int,
+        imageHash: String,
+        readingOrderMode: String? = null,
+    ): NarrationPage? = synchronized(lock) {
         require(pageIndex >= 0) { "Invalid narration page." }
         read<NarrationPage>(File(chapter(mangaId, chapterId), "$pageIndex.json"))
-            ?.takeIf { it.imageHash == imageHash && it.pageIndex == pageIndex }
+            ?.takeIf {
+                it.imageHash == imageHash && it.pageIndex == pageIndex &&
+                    (readingOrderMode == null || it.readingOrderMode == normalizeNarrationReadingOrder(readingOrderMode))
+            }
     }
 
     fun savePage(mangaId: Long, chapterId: Long, page: NarrationPage) = synchronized(lock) {

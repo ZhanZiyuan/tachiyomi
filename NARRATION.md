@@ -15,7 +15,7 @@ This personal Android build calls Gemini and ElevenLabs directly from the phone.
 ## Processing and playback
 
 - The visible page is analyzed first and each Gemini request contains only that one page. As soon as its first top-to-bottom dialogue clip is generated, narration can start while the remaining dialogue and pages continue preparing in the background. Moving to another page makes that page the next priority. Required images are loaded through the reader's existing page loader. Ordinary reading remains available during preparation.
-- Gemini detects each page's visual panel flow—right-to-left, left-to-right, or top-to-bottom—before ordering dialogue. The reader's paging direction is only a fallback when a page layout is ambiguous. Reset an already cached chapter to reanalyze it with updated visual-order detection.
+- **Narration reading order** is separate from reader paging direction. Choose **Auto** to let Gemini detect each page's visual panel flow, or force **right-to-left**, **left-to-right**, or **top-to-bottom**. A forced choice applies to both panels and bubbles and cannot be overridden by Gemini. Pages analyzed with a different choice are reanalyzed before reuse.
 - Narration only changes a manga whose saved reader mode is **Default**. A reader mode you explicitly set for a manga remains untouched.
 - Progress counts completed page analysis (0–40%) and completed speech clips (40–99%). Only a fully committed chapter reaches 100%, including a chapter with no spoken dialogue. Cached work is reused rather than billed again.
 - Long images are split into overlapping slices before upload. Overlapping dialogue is deduplicated and coordinates are mapped back to the source page.

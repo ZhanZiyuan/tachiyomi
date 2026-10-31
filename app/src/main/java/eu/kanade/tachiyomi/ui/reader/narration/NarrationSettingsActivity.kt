@@ -31,6 +31,7 @@ class NarrationSettingsActivity : BaseActivity() {
     private lateinit var settings: NarrationSettings
     private lateinit var enabled: SwitchCompat
     private lateinit var autoPlay: SwitchCompat
+    private lateinit var readingOrder: Button
     private lateinit var playbackSpeed: SeekBar
     private lateinit var pauseBetweenLines: SeekBar
     private lateinit var geminiKey: EditText
@@ -39,6 +40,7 @@ class NarrationSettingsActivity : BaseActivity() {
     private lateinit var speechModel: EditText
     private lateinit var voiceId: EditText
     private lateinit var status: TextView
+    private var narrationReadingOrder = "auto"
     private var voiceRequest: Job? = null
     private var voicePicker: AlertDialog? = null
 
@@ -72,6 +74,29 @@ class NarrationSettingsActivity : BaseActivity() {
         })
         enabled = form.addSwitch(R.string.narration_enable, settings.enabled)
         autoPlay = form.addSwitch(R.string.narration_auto_play, settings.autoPlay)
+        narrationReadingOrder = settings.narrationReadingOrder
+        readingOrder = form.addChoice(
+            R.string.narration_reading_order,
+            readingOrderLabel(narrationReadingOrder),
+        )
+        readingOrder.setOnClickListener {
+            val values = listOf("auto", "right-to-left", "left-to-right", "top-to-bottom")
+            val labels = values.map(::readingOrderLabel)
+            AlertDialog.Builder(this)
+                .setTitle(R.string.narration_reading_order)
+                .setSingleChoiceItems(labels.toTypedArray(), values.indexOf(narrationReadingOrder)) { dialog, which ->
+                    narrationReadingOrder = values[which]
+                    readingOrder.text = labels[which]
+                    readingOrder.contentDescription = getString(
+                        R.string.narration_control_value,
+                        getString(R.string.narration_reading_order),
+                        labels[which],
+                    )
+                    dialog.dismiss()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
         playbackSpeed = form.addRange(
             R.string.narration_playback_speed,
             settings.playbackSpeedPercent,
@@ -153,6 +178,29 @@ class NarrationSettingsActivity : BaseActivity() {
         return field
     }
 
+    private fun LinearLayout.addChoice(label: Int, value: String): Button {
+        addView(TextView(this@NarrationSettingsActivity).apply {
+            setText(label)
+            setPadding(0, dp(16), 0, dp(4))
+        })
+        val button = Button(this@NarrationSettingsActivity).apply {
+            text = value
+            minHeight = dp(48)
+            contentDescription = getString(R.string.narration_control_value, getString(label), value)
+        }
+        addView(button, LinearLayout.LayoutParams(-1, -2))
+        return button
+    }
+
+    private fun readingOrderLabel(value: String): String = getString(
+        when (normalizeNarrationReadingOrder(value)) {
+            "right-to-left" -> R.string.narration_reading_order_rtl
+            "left-to-right" -> R.string.narration_reading_order_ltr
+            "top-to-bottom" -> R.string.narration_reading_order_ttb
+            else -> R.string.narration_reading_order_auto
+        },
+    )
+
     private fun LinearLayout.addRange(
         label: Int,
         value: Int,
@@ -207,6 +255,7 @@ class NarrationSettingsActivity : BaseActivity() {
             settings.speechModel = speechModel.text.toString()
             settings.defaultVoiceId = voiceId.text.toString()
             settings.autoPlay = autoPlay.isChecked
+            settings.narrationReadingOrder = narrationReadingOrder
             settings.playbackSpeedPercent = 50 + playbackSpeed.progress * 5
             settings.pauseBetweenLinesMs = pauseBetweenLines.progress * 100
             settings.enabled = enabled.isChecked

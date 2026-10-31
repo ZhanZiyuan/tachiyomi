@@ -91,7 +91,8 @@ class NarrationApi {
         images: List<AnalysisImage>,
         characters: List<NarrationCharacter>,
         previousContext: String,
-        readingDirection: String,
+        readingOrder: String,
+        readerFallbackDirection: String,
     ): NarrationAnalysis = withContext(Dispatchers.IO) {
         checkKey(key, "Gemini")
         val modelName = model.removePrefix("models/")
@@ -110,6 +111,21 @@ class NarrationApi {
         }
 
         val known = characters.takeLast(150)
+        val selectedOrder = normalizeNarrationReadingOrder(readingOrder)
+        val effectiveDirection = narrationEffectiveReadingDirection(selectedOrder, readerFallbackDirection)
+        val orderInstruction = if (selectedOrder == "auto") {
+            """
+            Narration reading-order option: Auto. First inspect the visual layout of EACH page and choose its actual flow:
+            right-to-left, left-to-right, or top-to-bottom. Set the page result's readingDirection to that detected flow.
+            Reader fallback when the visual evidence is genuinely ambiguous: $effectiveDirection.
+            """.trimIndent()
+        } else {
+            """
+            Narration reading-order option: FORCE $effectiveDirection. Set every page result's readingDirection to
+            $effectiveDirection and use that exact direction for BOTH panel sequence and bubble sequence. Do not
+            override this selection based on artwork, lettering, reader paging, or an inferred language.
+            """.trimIndent()
+        }
         val bank = buildJsonArray {
             known.forEach { character ->
                 add(buildJsonObject {
@@ -126,9 +142,7 @@ class NarrationApi {
             Keep dialogue in its original language, with exact visible words. Never invent or complete hidden dialogue.
             Include dialogue, internal thoughts and narration.
             Exclude page numbers, credits and decorative sound effects.
-            Reader setting fallback: ${readingDirection.take(80)}. Do NOT blindly follow it.
-            First inspect the visual layout of EACH page and choose its actual flow: right-to-left,
-            left-to-right, or top-to-bottom. Set the page result's readingDirection to that detected flow.
+            $orderInstruction
             First trace every panel as a complete unit. Assign panelIndex 0, 1, 2... in its visual reading sequence.
             Then order bubbles only within their own panel using that page's detected flow; order starts at 0 for each panel.
             For right-to-left manga, complete the top-right panel before moving to a panel on its left.
@@ -136,9 +150,8 @@ class NarrationApi {
             bubbles from a left panel with bubbles in a right panel, even when their vertical positions overlap.
             For left-to-right comics, complete the left panel before the panel on its right. For vertical comics,
             complete panels from top to bottom. Use panel boundaries and gutters, not just the x-coordinate of text.
-            For side-by-side panels, do not assume the right panel is first: use right-to-left only when
+            Only when the option is Auto, do not assume the right panel is first: use right-to-left only when
             the page's artwork and lettering clearly use manga flow; use left-to-right when it clearly does.
-            Use the reader setting only when visual evidence is genuinely ambiguous.
             Each image is preceded by its pageIndex label.
             Return one page result per supplied pageIndex, even if lines is empty.
             box is [left, top, right, bottom] normalized 0 to 1 in the ORIGINAL supplied page image.
@@ -249,7 +262,12 @@ class NarrationApi {
                 pageIndex = image.pageIndex,
                 imageHash = sha256(image.bytes),
                 lines = lines,
-                readingDirection = normalizeNarrationReadingDirection(page.readingDirection, readingDirection),
+                readingDirection = if (selectedOrder == "auto") {
+                    normalizeNarrationReadingDirection(page.readingDirection, effectiveDirection)
+                } else {
+                    effectiveDirection
+                },
+                readingOrderMode = selectedOrder,
                 characters = pageCharacters,
             )
         }

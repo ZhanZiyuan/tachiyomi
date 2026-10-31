@@ -39,6 +39,19 @@ class NarrationValidationTest {
     }
 
     @Test
+    fun `forced narration order wins over the reader direction`() {
+        assertEquals(
+            "right-to-left",
+            narrationEffectiveReadingDirection("right-to-left", "left-to-right"),
+        )
+        assertEquals(
+            "left-to-right",
+            narrationEffectiveReadingDirection("auto", "left-to-right"),
+        )
+        assertEquals("auto", normalizeNarrationReadingOrder("anything else"))
+    }
+
+    @Test
     fun `first ready page can speak while the rest of a chapter prepares`() {
         assertTrue(narrationCanStartPlayback(true, false, true, true, false))
         assertFalse(narrationCanStartPlayback(false, false, true, true, false))
